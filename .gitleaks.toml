@@ -1,0 +1,14 @@
+title = "ProofStamp gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Ignore generated and operational artifacts"
+paths = [
+  '''(^|/)node_modules/''',
+  '''(^|/)dist/''',
+  '''(^|/)assets/fonts/''',
+  '''(^|/)data/processed-stars-payments\.json$''',
+  '''(^|/)package-lock\.json$'''
+]
