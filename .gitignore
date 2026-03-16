@@ -1,0 +1,15 @@
+node_modules/
+dist/
+
+.env
+.env.*
+!.env.example
+
+logs/
+data/
+*.log
+
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
