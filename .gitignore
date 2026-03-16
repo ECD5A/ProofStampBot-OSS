@@ -1,0 +1,39 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+*.tsbuildinfo
+
+# env (secrets)
+.env
+.env.*
+!.env.example
+
+# key material / secrets
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa
+id_ed25519
+secrets/
+
+# runtime data / logs
+logs/
+data/
+*.log
+*.pid
+
+# npm cache / debug
+.npm/
+npm-debug.log*
+
+# OS/IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
