@@ -1,6 +1,5 @@
 # ProofStamp Bot (Open Source)
 
-Developer: **ECD5A**  
 Bot: [@ProofStampBot](https://t.me/ProofStampBot)  
 Website: https://proofstamp.ru
 
@@ -15,12 +14,6 @@ Payments are supported via TON and Telegram Stars.
 - Payment via TON or Telegram Stars
 - PDF proof certificate generation (QR + transaction link)
 - Group and channel stamp workflows
-
-## Donate
-
-- TON: `pointoncurve.ton`
-- BTC: `1ECDSA1b4d5TcZHtqNpcxmY8pBH1GgHntN`
-- USDT (TRC20): `TSWcFVfqCp4WCXrUkkzdCkcLnhtFLNN3Ba`
 
 ## Requirements
 
@@ -54,19 +47,20 @@ Recommended:
 ## SHA-256 Integrity
 
 Release archive: `releases/proof-stamp-bot-oss-v1.0.0.zip`  
-Checksum (SHA-256): `62524673017102e022e8ce6b4930fe65476238c0e4e7e3b4036cb2ad41c3fb2b`
-
-Full file checksums: `FILES_SHA256.txt`
+Release checksum: `62524673017102e022e8ce6b4930fe65476238c0e4e7e3b4036cb2ad41c3fb2b`  
+Repository checksums: `FILES_SHA256.txt`
 
 ## Security Notes
 
 - Do not commit `.env`, mnemonics, API keys, or private keys
 - Runtime data/logs should stay outside git history
 
+## Donate
+
+- TON: `pointoncurve.ton`
+- BTC: `1ECDSA1b4d5TcZHtqNpcxmY8pBH1GgHntN`
+- USDT (TRC20): `TSWcFVfqCp4WCXrUkkzdCkcLnhtFLNN3Ba`
+
 ## License
 
 MIT License. Full text is in [LICENSE](LICENSE).
-
-References:
-- https://opensource.org/license/mit/
-- https://spdx.org/licenses/MIT.html
