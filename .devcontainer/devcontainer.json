@@ -1,0 +1,9 @@
+{npm ci
+cp .env.example .env
+# edit .env
+npm run build
+npm run start
+  
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "features": {}
+}
