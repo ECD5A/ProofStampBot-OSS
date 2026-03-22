@@ -48,7 +48,8 @@ Recommended:
 
 Release archive: `releases/proof-stamp-bot-oss-v1.0.0.zip`  
 Release checksum: `62524673017102e022e8ce6b4930fe65476238c0e4e7e3b4036cb2ad41c3fb2b`  
-Repository checksums: `FILES_SHA256.txt`
+Repository checksums: `FILES_SHA256.txt`  
+Note: `FILES_SHA256.txt` is generated from raw file bytes in the checked-out repository and excludes itself to avoid a recursive checksum mismatch.
 
 ## Security Notes
 
