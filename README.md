@@ -62,6 +62,16 @@ Note: `FILES_SHA256.txt` is generated from raw file bytes in the checked-out rep
 - BTC: `1ECDSA1b4d5TcZHtqNpcxmY8pBH1GgHntN`
 - USDT (TRC20): `TSWcFVfqCp4WCXrUkkzdCkcLnhtFLNN3Ba`
 
+## Disclaimer
+
+This repository is provided as a reference implementation only.
+
+- No active development is planned
+- No support or issue handling is guaranteed
+- Pull requests may be ignored or declined
+
+Feel free to fork, modify, and use it for your own purposes.
+
 ## License
 
 MIT License. Full text is in [LICENSE](LICENSE).
