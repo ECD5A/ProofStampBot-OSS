@@ -10,6 +10,7 @@ import { createStarsInvoice, createTonConnectLink } from './payments';
 import { t, setLang, getLang, normalizeLang, Lang } from './i18n';
 
 type SessionState = 'await_owner' | 'await_payment' | 'processing';
+type ChannelStampTextMode = 'hash_only' | 'hash_and_text';
 
 type PendingSession = {
   sessionId: string;
@@ -23,13 +24,15 @@ type PendingSession = {
   channelChatId?: number;
   channelMessageId?: number;
   channelThreadId?: number;
+  postTextMode?: ChannelStampTextMode;
+  postText?: string;
+  postTextHash?: string;
   starsInvoicePayload?: string;
   starsPaid?: boolean;
   starsChargeId?: string;
 };
 
 type CaptchaEmojiId = 'apple' | 'cat' | 'car' | 'rocket' | 'star' | 'balloon';
-
 type CaptchaOption = {
   id: CaptchaEmojiId;
   emoji: string;
@@ -75,6 +78,8 @@ type ChannelPostSession = {
   hash: string;
   fileName: string;
   channelTitle: string;
+  postText?: string;
+  postTextHash?: string;
   promptMessageId?: number;
 };
 
@@ -89,6 +94,8 @@ type ChannelStampRecord = {
   proofMessageId?: number;
   fileName: string;
   channelTitle: string;
+  textIncluded?: boolean;
+  textHash?: string;
 };
 
 type ChannelStampStore = Record<string, ChannelStampRecord>;
@@ -112,6 +119,7 @@ const starsInvoiceIndex = new Map<string, { chatId: number; sessionId: string }>
 const processingPayments = new Set<string>();
 const hashJobsInProgress = new Set<number>();
 const rateBuckets = new Map<string, RateBucket>();
+const MAX_POST_TEXT_TON_BYTES = 1500;
 const channelPostSessions = new Map<string, ChannelPostSession>();
 const processingChannelStamps = new Set<string>();
 const forwardedStampTargets = new Map<number, ForwardedStampTarget>();
@@ -459,6 +467,21 @@ function sanitizeAsciiSlug(value: string, maxLen: number): string {
   return clean || 'post';
 }
 
+function extractChannelPostText(post: any): string | undefined {
+  const raw =
+    typeof post?.caption === 'string'
+      ? post.caption
+      : typeof post?.text === 'string'
+        ? post.text
+        : '';
+  const normalized = raw.replace(/\r\n?/g, '\n');
+  return normalized.trim() ? normalized : undefined;
+}
+
+function hashTextSnapshot(text: string): string {
+  return createHash('sha256').update(text, 'utf8').digest('hex');
+}
+
 function toEntityShape(entities: any[] | undefined): Array<Record<string, unknown>> | undefined {
   if (!Array.isArray(entities) || entities.length === 0) return undefined;
   return entities.map((e) => ({
@@ -533,6 +556,8 @@ function upsertChannelPostSession(post: any): ChannelPostSession | null {
   const key = makeChannelStampKey(chatId, messageId);
   const textPreview = String(post.caption || post.text || '').slice(0, 24);
   const hash = hashChannelPost(post);
+  const postText = extractChannelPostText(post);
+  const postTextHash = postText ? hashTextSnapshot(postText) : undefined;
   const channelTitle = String(post.chat?.title || (chatType === 'channel' ? 'channel' : 'chat'));
   const fileNamePrefix = chatType === 'channel' ? 'channel' : 'chat';
   const fileName = `${fileNamePrefix}_${Math.abs(chatId)}_${messageId}_${sanitizeAsciiSlug(textPreview, 20)}`;
@@ -547,10 +572,70 @@ function upsertChannelPostSession(post: any): ChannelPostSession | null {
     hash,
     fileName,
     channelTitle,
+    postText,
+    postTextHash,
     promptMessageId: prev?.promptMessageId,
   };
   channelPostSessions.set(key, sess);
   return sess;
+}
+
+function getNotarizationCommentOptions(
+  sess: PendingSession
+): { postText: string; postTextHash?: string } | undefined {
+  if (sess.kind !== 'channel_post' || sess.postTextMode !== 'hash_and_text' || !sess.postText) {
+    return undefined;
+  }
+  return {
+    postText: sess.postText,
+    postTextHash: sess.postTextHash,
+  };
+}
+
+function getChannelStampModePricing(mode: ChannelStampTextMode): { starsPrice: number; tonPrice: number; anchorTon: number } {
+  if (mode === 'hash_and_text') {
+    return {
+      starsPrice: config.starsPostTextPrice,
+      tonPrice: config.tonPostTextPrice,
+      anchorTon: config.starsPostTextAnchorTon,
+    };
+  }
+
+  return {
+    starsPrice: config.starsPrice,
+    tonPrice: config.tonPrice,
+    anchorTon: config.starsAnchorTon,
+  };
+}
+
+function getSessionPricing(sess: PendingSession): { starsPrice: number; tonPrice: number; anchorTon: number } {
+  if (sess.kind === 'channel_post' && sess.postTextMode === 'hash_and_text') {
+    return getChannelStampModePricing('hash_and_text');
+  }
+  return getChannelStampModePricing('hash_only');
+}
+
+function getChannelStampDoneTextKey(sess: PendingSession): string {
+  return sess.kind === 'channel_post' && sess.postTextMode === 'hash_and_text'
+    ? 'channel_stamp_done_with_text'
+    : 'channel_stamp_done';
+}
+
+function getPostTextTonBytes(text?: string): number {
+  return Buffer.byteLength(text || '', 'utf8');
+}
+
+function canStorePostTextInTon(text?: string): boolean {
+  return Boolean(text) && getPostTextTonBytes(text) <= MAX_POST_TEXT_TON_BYTES;
+}
+
+function getChannelStampPrivateDoneMessage(userId: number, sess: PendingSession, txHash: string): string {
+  const explorerUrl = getTonviewerUrl(txHash);
+  return `${t(userId, getChannelStampDoneTextKey(sess))}\nTX: <a href="${explorerUrl}">${txHash}</a>`;
+}
+
+function padButtonLabel(label: string): string {
+  return `${label}\u00A0\u00A0`;
 }
 
 function isStampableMessage(msg: any): boolean {
@@ -776,30 +861,78 @@ async function promptOwnerInput(ctx: Context, userId: number): Promise<void> {
   });
 }
 
+async function sendChannelStampModeOptions(
+  api: Context['api'],
+  chatId: number,
+  userId: number,
+  postText?: string
+): Promise<void> {
+  const hashOnlyPricing = getChannelStampModePricing('hash_only');
+  const hashTextPricing = getChannelStampModePricing('hash_and_text');
+  const canStoreText = canStorePostTextInTon(postText);
+  const kb = new InlineKeyboard().text(t(userId, 'channel_stamp_mode_hash_only'), 'stamp_mode_hash_only').row();
+  if (canStoreText) {
+    kb.text(t(userId, 'channel_stamp_mode_hash_text'), 'stamp_mode_hash_text').row();
+  }
+  kb.text(t(userId, 'btn_cancel'), 'cancel_session');
+
+  const messageParts = [
+    t(userId, 'channel_stamp_mode_title'),
+    t(userId, 'channel_stamp_mode_hash_only_hint', hashOnlyPricing),
+  ];
+
+  if (canStoreText) {
+    messageParts.push(
+      t(userId, 'channel_stamp_mode_hash_text_hint', hashTextPricing),
+      t(userId, 'channel_stamp_mode_text_warning')
+    );
+  } else if (postText) {
+    messageParts.push(t(userId, 'channel_stamp_mode_text_too_long', { maxBytes: MAX_POST_TEXT_TON_BYTES }));
+  }
+
+  await api.sendMessage(
+    chatId,
+    messageParts.join('\n\n'),
+    {
+      parse_mode: 'HTML',
+      reply_markup: kb,
+    }
+  );
+}
+
 async function sendPaymentOptions(api: Context['api'], chatId: number, userId: number, sess: PendingSession): Promise<void> {
   if (sess.state !== 'await_payment') {
     sess.state = 'await_payment';
   }
 
-  const starsPrice = config.starsPrice;
-  const tonPrice = config.tonPrice;
+  const { starsPrice, tonPrice } = getSessionPricing(sess);
 
-  const tonLink = createTonConnectLink(sess.hash);
+  const tonLink = createTonConnectLink(sess.hash, getNotarizationCommentOptions(sess), tonPrice);
 
   const kb = new InlineKeyboard();
   if (!sess.starsPaid) {
-    kb.text(t(userId, 'btn_pay_stars', { starsPrice }), 'pay_stars').row();
-    kb.url(t(userId, 'btn_pay_ton', { tonPrice }), tonLink).row();
+    kb.text(padButtonLabel(t(userId, 'btn_pay_stars', { starsPrice })), 'pay_stars').row();
+    kb.url(padButtonLabel(t(userId, 'btn_pay_ton', { tonPrice })), tonLink).row();
   }
-  kb.text(t(userId, 'btn_verify_payment'), 'verify_ton').row().text(t(userId, 'btn_cancel'), 'cancel_session');
+  kb.text(padButtonLabel(t(userId, 'btn_verify_payment')), 'verify_ton')
+    .row()
+    .text(padButtonLabel(t(userId, 'btn_cancel')), 'cancel_session');
 
   await api.sendMessage(chatId, INVISIBLE_MESSAGE, { reply_markup: kb });
+}
+
+async function sendSessionOptions(api: Context['api'], chatId: number, userId: number, sess: PendingSession): Promise<void> {
+  if (sess.kind === 'channel_post' && sess.postText && !sess.postTextMode) {
+    await sendChannelStampModeOptions(api, chatId, userId, sess.postText);
+    return;
+  }
+  await sendPaymentOptions(api, chatId, userId, sess);
 }
 
 async function showPaymentOptions(ctx: Context, userId: number, sess: PendingSession): Promise<void> {
   const chatId = ctx.chat?.id;
   if (!chatId) return;
-  await sendPaymentOptions(ctx.api, chatId, userId, sess);
+  await sendSessionOptions(ctx.api, chatId, userId, sess);
 }
 
 async function hashTelegramFile(filePath: string): Promise<string> {
@@ -894,6 +1027,8 @@ async function publishChannelStampProof(
     proofMessageId: proofMsg.message_id,
     fileName: sess.fileName,
     channelTitle: sess.ownerName || 'channel',
+    textIncluded: sess.postTextMode === 'hash_and_text' && Boolean(sess.postText),
+    textHash: sess.postTextMode === 'hash_and_text' ? sess.postTextHash : undefined,
   };
   saveChannelStampStore();
   channelPostSessions.delete(sess.channelKey);
@@ -923,6 +1058,9 @@ async function startChannelStampInPrivate(
     channelChatId: sess.chatId,
     channelMessageId: sess.messageId,
     channelThreadId: sess.messageThreadId,
+    postTextMode: sess.postText ? undefined : 'hash_only',
+    postText: sess.postText,
+    postTextHash: sess.postTextHash,
   };
   setSession(userId, paySess);
 
@@ -934,8 +1072,12 @@ async function startChannelStampInPrivate(
   });
 
   try {
-    await api.sendMessage(userId, intro, { parse_mode: 'HTML' });
-    await sendPaymentOptions(api, userId, userId, paySess);
+    if (sess.postText) {
+      await sendChannelStampModeOptions(api, userId, userId, sess.postText);
+    } else {
+      await api.sendMessage(userId, intro, { parse_mode: 'HTML' });
+      await sendSessionOptions(api, userId, userId, paySess);
+    }
     return 'started';
   } catch (err) {
     clearPendingSession(userId);
@@ -1129,7 +1271,10 @@ export function createBot(): Bot {
     }
     if (!(await ensureCaptchaForMessage(ctx, userId))) return;
 
-    await ctx.reply(t(userId, 'help', { starsPrice: config.starsPrice, tonPrice: config.tonPrice }), {
+    const helpText =
+      `${t(userId, 'help', { starsPrice: config.starsPrice, tonPrice: config.tonPrice })}\n\n` +
+      t(userId, 'help_post_text_feature', { starsPrice: config.starsPostTextPrice, tonPrice: config.tonPostTextPrice });
+    await ctx.reply(helpText, {
       parse_mode: 'HTML',
     });
   });
@@ -1321,6 +1466,64 @@ export function createBot(): Bot {
 
   bot.callbackQuery('channel_stamp_noop', async (ctx) => {
     await ctx.answerCallbackQuery().catch(() => {});
+  });
+
+  bot.callbackQuery('stamp_mode_hash_only', async (ctx) => {
+    const chatId = ctx.chat?.id;
+    const userId = ctx.from?.id ?? 0;
+    if (!chatId) return;
+    if (ctx.chat?.type !== 'private') {
+      await ctx.answerCallbackQuery().catch(() => {});
+      return;
+    }
+    if (hitRateLimit('cb', userId, 40, RATE_LIMIT_WINDOW_MS)) {
+      await replyRateLimited(ctx, userId, true);
+      return;
+    }
+    if (!(await ensureCaptchaForCallback(ctx, userId))) return;
+
+    const sess = pending.get(chatId);
+    if (!sess || sess.kind !== 'channel_post') {
+      await ctx.answerCallbackQuery({ text: t(userId, 'session_expired') }).catch(() => {});
+      return;
+    }
+
+    sess.postTextMode = 'hash_only';
+    setSession(chatId, sess);
+
+    await ctx.answerCallbackQuery({ text: t(userId, 'channel_stamp_mode_hash_only_selected') }).catch(() => {});
+    await sendPaymentOptions(ctx.api, chatId, userId, sess);
+  });
+
+  bot.callbackQuery('stamp_mode_hash_text', async (ctx) => {
+    const chatId = ctx.chat?.id;
+    const userId = ctx.from?.id ?? 0;
+    if (!chatId) return;
+    if (ctx.chat?.type !== 'private') {
+      await ctx.answerCallbackQuery().catch(() => {});
+      return;
+    }
+    if (hitRateLimit('cb', userId, 40, RATE_LIMIT_WINDOW_MS)) {
+      await replyRateLimited(ctx, userId, true);
+      return;
+    }
+    if (!(await ensureCaptchaForCallback(ctx, userId))) return;
+
+    const sess = pending.get(chatId);
+    if (!sess || sess.kind !== 'channel_post' || !sess.postText) {
+      await ctx.answerCallbackQuery({ text: t(userId, 'session_expired') }).catch(() => {});
+      return;
+    }
+    if (!canStorePostTextInTon(sess.postText)) {
+      await ctx.answerCallbackQuery({ text: t(userId, 'channel_stamp_mode_text_too_long_short') }).catch(() => {});
+      return;
+    }
+
+    sess.postTextMode = 'hash_and_text';
+    setSession(chatId, sess);
+
+    await ctx.answerCallbackQuery({ text: t(userId, 'channel_stamp_mode_hash_text_selected') }).catch(() => {});
+    await sendPaymentOptions(ctx.api, chatId, userId, sess);
   });
 
   bot.on('message:text', async (ctx) => {
@@ -1564,7 +1767,8 @@ export function createBot(): Bot {
     await ctx.answerCallbackQuery().catch(() => {});
 
     const token = hashToToken(sess.hash);
-    const invoice = createStarsInvoice(chatId, token, sess.sessionId);
+    const { starsPrice } = getSessionPricing(sess);
+    const invoice = createStarsInvoice(chatId, token, sess.sessionId, starsPrice);
 
     const prevPayload = sess.starsInvoicePayload;
     sess.starsInvoicePayload = invoice.payload;
@@ -1641,7 +1845,7 @@ export function createBot(): Bot {
 
       const res: { found: boolean; txHash?: string; timestamp?: number; underpaid?: boolean } = sess.starsPaid
         ? await verifyDocumentHash(sess.hash)
-        : await verifyTonPayment(sess.hash);
+        : await verifyTonPayment(sess.hash, getSessionPricing(sess).tonPrice);
       let txHash: string;
       let txTimestamp: Date;
 
@@ -1649,13 +1853,13 @@ export function createBot(): Bot {
         txHash = res.txHash;
         txTimestamp = new Date(res.timestamp * 1000);
       } else if (sess.starsPaid) {
-        txHash = await sendNotarizationTx(sess.hash);
+        txHash = await sendNotarizationTx(sess.hash, getNotarizationCommentOptions(sess), getSessionPricing(sess).anchorTon);
         txTimestamp = new Date();
       } else {
         sess.state = 'await_payment';
         setSession(chatId, sess);
         if (!sess.starsPaid && res.underpaid) {
-          await ctx.reply(t(userId, 'ton_payment_underpaid', { tonPrice: config.tonPrice }));
+          await ctx.reply(t(userId, 'ton_payment_underpaid', { tonPrice: getSessionPricing(sess).tonPrice }));
         } else {
           await ctx.reply(t(userId, 'not_found'));
         }
@@ -1677,7 +1881,14 @@ export function createBot(): Bot {
         });
 
         const published = await publishChannelStampProof(ctx, userId, sess, txHash, txTimestamp, pdf);
-        await ctx.reply(t(userId, published ? 'channel_stamp_done' : 'channel_stamp_already_done'));
+        if (published) {
+          await ctx.reply(getChannelStampPrivateDoneMessage(userId, sess, txHash), {
+            parse_mode: 'HTML',
+            link_preview_options: { is_disabled: true },
+          });
+        } else {
+          await ctx.reply(t(userId, 'channel_stamp_already_done'));
+        }
       } else {
         await ctx.api.sendChatAction(chatId, 'upload_document').catch(() => {});
         const pdf = await generateCertificate({
@@ -1728,12 +1939,7 @@ export function createBot(): Bot {
     const parsed = parseStarsPayload(q.invoice_payload || '');
     const payload = q.invoice_payload || '';
 
-    const isValid =
-      Boolean(parsed) &&
-      q.currency === 'XTR' &&
-      q.total_amount === config.starsPrice;
-
-    if (!isValid) {
+    if (!parsed || q.currency !== 'XTR') {
       await ctx.answerPreCheckoutQuery(false, t(userId, 'invalid_payment')).catch(() => {});
       return;
     }
@@ -1758,6 +1964,12 @@ export function createBot(): Bot {
     }
 
     const { sess } = bound;
+    const { starsPrice } = getSessionPricing(sess);
+    if (q.total_amount !== starsPrice) {
+      await ctx.answerPreCheckoutQuery(false, t(userId, 'invalid_payment')).catch(() => {});
+      return;
+    }
+
     const pendingTtlMs = config.pendingTtlMinutes * 60_000;
     if (Date.now() - sess.createdAt > pendingTtlMs) {
       clearPendingSession(bound.chatId);
@@ -1796,7 +2008,7 @@ export function createBot(): Bot {
     const parsed = parseStarsPayload(payload);
     const chargeId = (payment.telegram_payment_charge_id || '').trim();
 
-    if (!parsed || payment.currency !== 'XTR' || payment.total_amount !== config.starsPrice) {
+    if (!parsed || payment.currency !== 'XTR') {
       await ctx.reply(t(userId, 'invalid_payment'));
       return;
     }
@@ -1844,6 +2056,12 @@ export function createBot(): Bot {
           starsInvoicePayload: payload,
         };
 
+    if (payment.total_amount !== getSessionPricing(boundSess).starsPrice) {
+      processingPayments.delete(chargeId);
+      await ctx.reply(t(userId, 'invalid_payment'));
+      return;
+    }
+
     const canUseSessionMeta = existingMatches;
 
     boundSess.state = 'processing';
@@ -1887,7 +2105,7 @@ export function createBot(): Bot {
         txHash = existing.txHash;
         txTime = new Date(existing.timestamp * 1000);
       } else {
-        txHash = await sendNotarizationTx(hash);
+        txHash = await sendNotarizationTx(hash, getNotarizationCommentOptions(boundSess), getSessionPricing(boundSess).anchorTon);
         txTime = new Date();
       }
 
@@ -1907,7 +2125,14 @@ export function createBot(): Bot {
         });
 
         const published = await publishChannelStampProof(ctx, userId, boundSess, txHash, txTime, pdf);
-        await ctx.reply(t(userId, published ? 'channel_stamp_done' : 'channel_stamp_already_done'));
+        if (published) {
+          await ctx.reply(getChannelStampPrivateDoneMessage(userId, boundSess, txHash), {
+            parse_mode: 'HTML',
+            link_preview_options: { is_disabled: true },
+          });
+        } else {
+          await ctx.reply(t(userId, 'channel_stamp_already_done'));
+        }
       } else {
         await ctx.api.sendChatAction(chatId, 'upload_document').catch(() => {});
         const pdf = await generateCertificate({
@@ -1955,7 +2180,7 @@ export function createBot(): Bot {
           current.starsChargeId = chargeId;
           current.starsInvoicePayload = payload;
           setSession(boundChatId, current);
-          await sendPaymentOptions(ctx.api, boundChatId, userId, current).catch(() => {});
+          await sendSessionOptions(ctx.api, boundChatId, userId, current).catch(() => {});
         }
       }
     }

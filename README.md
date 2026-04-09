@@ -1,24 +1,73 @@
 # ProofStamp Bot (Open Source)
 
-Bot: [@ProofStampBot](https://t.me/ProofStampBot)  
-Website: https://proofstamp.ru
+Bot: [@ProofStampBot](https://t.me/ProofStampBot)
 
-ProofStamp is a Telegram bot for document timestamping on TON.
-It calculates SHA-256 fingerprints, writes proof to blockchain, and generates a PDF certificate.
-Payments are supported via TON and Telegram Stars.
+ProofStamp is a Telegram bot for cryptographic anchoring on TON.
+It works with files, documents, and posts, records SHA-256 on-chain, and generates a PDF certificate with QR and transaction link.
+For posts in groups and channels, the bot supports two modes: proof only, or proof together with the full original post text in TON.
 
 ## Features
 
-- SHA-256 hash notarization on TON
-- On-chain comment format: `ProofStamp SHA256:<64-hex>`
-- Payment via TON or Telegram Stars
-- PDF proof certificate generation (QR + transaction link)
-- Group and channel stamp workflows
+- SHA-256 anchoring for files and documents
+- Group and channel post stamping
+- Optional `Proof + text` mode for posts
+- Payment via TON and Telegram Stars
+- PDF certificate generation with QR + transaction link
+- Multi-language interface
+- Pricing stored in `config/pricing.json`
 
-## Requirements
+## Screenshots
 
-- Node.js (recommended: Node 20 LTS)
-- npm
+<p align="center">
+  <img src="assets/screenshots/bot-info-start.jpg" alt="Bot info card" width="220" />
+  <img src="assets/screenshots/bot-welcome-languages.jpg" alt="Welcome and language selection" width="220" />
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/bot-payment-flow.jpg" alt="Payment flow" width="220" />
+  <img src="assets/screenshots/certificate-preview.jpg" alt="Certificate preview" width="220" />
+</p>
+
+## On-Chain Comment Format
+
+Standard file/document proof:
+
+```text
+ProofStamp
+SHA256:<64-hex>
+```
+
+Post proof with full text:
+
+```text
+ProofStamp
+Post SHA256:<64-hex>
+Text SHA256:<64-hex>
+
+Post text:
+<original post text>
+```
+
+## Pricing Configuration
+
+Prices are configured in `config/pricing.json`.
+
+Current example:
+
+```json
+{
+  "standard": {
+    "stars": 15,
+    "ton": 0.15,
+    "anchorTon": 0.1
+  },
+  "postText": {
+    "stars": 59,
+    "ton": 0.59,
+    "anchorTon": 0.59
+  }
+}
+```
 
 ## Quick Start
 
@@ -26,6 +75,7 @@ Payments are supported via TON and Telegram Stars.
 npm ci
 cp .env.example .env
 # edit .env
+# edit config/pricing.json if needed
 npm run build
 npm run start
 ```
@@ -46,15 +96,14 @@ Recommended:
 
 ## SHA-256 Integrity
 
-Release archive: `releases/proof-stamp-bot-oss-v1.0.0.zip`  
-Release checksum: `62524673017102e022e8ce6b4930fe65476238c0e4e7e3b4036cb2ad41c3fb2b`  
-Repository checksums: `FILES_SHA256.txt`  
-Note: `FILES_SHA256.txt` is generated from raw file bytes in the checked-out repository and excludes itself to avoid a recursive checksum mismatch.
+- Repository checksums: `FILES_SHA256.txt`
+- Release checksums: `RELEASE_CHECKSUMS.txt`
+- `FILES_SHA256.txt` is generated from raw file bytes in the checked-out repository and excludes itself to avoid recursive mismatch
 
 ## Security Notes
 
 - Do not commit `.env`, mnemonics, API keys, or private keys
-- Runtime data/logs should stay outside git history
+- Runtime data and logs should stay outside git history
 
 ## Donate
 

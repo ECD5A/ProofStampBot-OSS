@@ -2,6 +2,7 @@
 import { mnemonicToPrivateKey, KeyPair } from '@ton/crypto';
 import { config } from './config';
 import { beginCell, Address, SendMode } from '@ton/core';
+import { createHash } from 'crypto';
 
 let client: TonClient;
 let signerWallet: WalletContractV5R1;
@@ -17,6 +18,11 @@ const TON_API_RETRY_ATTEMPTS = 8;
 const TON_API_RETRY_BASE_MS = 1200;
 const TON_API_RETRY_MAX_MS = 12_000;
 let walletSendQueue: Promise<void> = Promise.resolve();
+
+type OnchainCommentOptions = {
+  postText?: string;
+  postTextHash?: string;
+};
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -108,7 +114,10 @@ function normalizeSha256(value: string): string {
 
 function isProofCommentForHash(comment: string, targetHash: string): boolean {
   const normalized = comment.trim().toLowerCase();
-  const isProofStampFormat = normalized.startsWith(`proofstamp sha256:${targetHash}`);
+  const isProofStampFormat =
+    normalized.startsWith(`proofstamp sha256:${targetHash}`) ||
+    normalized.startsWith(`proofstamp\nsha256:${targetHash}`) ||
+    normalized.startsWith(`proofstamp\npost sha256:${targetHash}`);
   const isPsFormat = normalized.startsWith(`ps|sha256:${targetHash}|o:`);
   const isLegacyProofstamp = normalized.startsWith('proofstamp|') && normalized.includes(targetHash);
   const isLegacyRussian = comment.startsWith('цифровая печать|') && comment.includes(targetHash);
@@ -145,13 +154,18 @@ function readIncomingPayment(tx: any, expectedDestRaw: string): { amountNano: bi
   }
 }
 
-/**
- * Build on-chain comment.
- * Format: ProofStamp SHA256:<64hex>
- */
-export function buildOnchainComment(documentHash: string): string {
+export function buildOnchainComment(documentHash: string, options?: OnchainCommentOptions): string {
   const docHash = normalizeSha256(documentHash);
-  return `ProofStamp SHA256:${docHash}`;
+  const postText = typeof options?.postText === 'string' ? options.postText.replace(/\r\n?/g, '\n') : '';
+  if (!postText.trim()) {
+    return `ProofStamp\nSHA256:${docHash}`;
+  }
+
+  const textHash = options?.postTextHash
+    ? normalizeSha256(options.postTextHash)
+    : createHash('sha256').update(postText, 'utf8').digest('hex');
+
+  return `ProofStamp\nPost SHA256:${docHash}\nText SHA256:${textHash}\n\nPost text:\n${postText}`;
 }
 
 export async function initTon(): Promise<void> {
@@ -227,12 +241,16 @@ export function getWalletAddress(): string {
   return payWalletAddress;
 }
 
-export async function sendNotarizationTx(documentHash: string): Promise<string> {
+export async function sendNotarizationTx(
+  documentHash: string,
+  options?: OnchainCommentOptions,
+  amountTon = 0.1
+): Promise<string> {
   return withWalletSendLock(async () => {
     const contract = client.open(signerWallet);
     const seqno = await withTonApiRetry('sendNotarizationTx/getSeqno', () => contract.getSeqno());
 
-    const comment = buildOnchainComment(documentHash);
+    const comment = buildOnchainComment(documentHash, options);
     const payload = beginCell().storeUint(0, 32).storeStringTail(comment).endCell();
 
     await withTonApiRetry('sendNotarizationTx/sendTransfer', () =>
@@ -243,7 +261,7 @@ export async function sendNotarizationTx(documentHash: string): Promise<string> 
         messages: [
           internal({
             to: signerWallet.address,
-            value: toNano('0.1'),
+            value: toNano(String(amountTon)),
             body: payload,
             bounce: false,
           }),
@@ -322,12 +340,15 @@ export async function verifyDocumentHash(documentHash: string): Promise<{ found:
   }
 }
 
-export async function verifyTonPayment(documentHash: string): Promise<{ found: boolean; txHash?: string; timestamp?: number; underpaid?: boolean }> {
+export async function verifyTonPayment(
+  documentHash: string,
+  minTonAmount = config.tonPrice
+): Promise<{ found: boolean; txHash?: string; timestamp?: number; underpaid?: boolean }> {
   const targetHash = normalizeSha256(documentHash);
   const pageSize = 100;
   const maxScan = 1000;
   const expectedDestRaw = payWalletAddressRaw.toRawString();
-  const minAmountNano = BigInt(Math.max(0, Math.floor(config.tonPrice * 1e9)));
+  const minAmountNano = BigInt(Math.max(0, Math.floor(minTonAmount * 1e9)));
   let underpaid = false;
 
   try {

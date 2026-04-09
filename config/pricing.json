@@ -1,0 +1,12 @@
+{
+  "standard": {
+    "stars": 15,
+    "ton": 0.15,
+    "anchorTon": 0.1
+  },
+  "postText": {
+    "stars": 59,
+    "ton": 0.59,
+    "anchorTon": 0.59
+  }
+}
