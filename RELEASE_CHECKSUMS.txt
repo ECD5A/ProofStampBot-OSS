@@ -1,1 +1,2 @@
+9cc17305403fd4ed1fbeb0d787cfd45367d961b9e96e4925bd4cc78a61a7106f  releases/proof-stamp-bot-oss-v1.1.0.zip
 62524673017102e022e8ce6b4930fe65476238c0e4e7e3b4036cb2ad41c3fb2b  releases/proof-stamp-bot-oss-v1.0.0.zip

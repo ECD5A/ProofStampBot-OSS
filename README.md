@@ -19,13 +19,10 @@ For posts in groups and channels, the bot supports two modes: proof only, or pro
 ## Screenshots
 
 <p align="center">
-  <img src="assets/screenshots/bot-info-start.jpg" alt="Bot info card" width="220" />
-  <img src="assets/screenshots/bot-welcome-languages.jpg" alt="Welcome and language selection" width="220" />
-</p>
-
-<p align="center">
-  <img src="assets/screenshots/bot-payment-flow.jpg" alt="Payment flow" width="220" />
-  <img src="assets/screenshots/certificate-preview.jpg" alt="Certificate preview" width="220" />
+  <img src="assets/screenshots/bot-info-start.jpg" alt="Bot info card" width="180" />
+  <img src="assets/screenshots/bot-welcome-languages.jpg" alt="Welcome and language selection" width="180" />
+  <img src="assets/screenshots/bot-payment-flow.jpg" alt="Payment flow" width="180" />
+  <img src="assets/screenshots/certificate-preview.jpg" alt="Certificate preview" width="180" />
 </p>
 
 ## On-Chain Comment Format
@@ -96,6 +93,7 @@ Recommended:
 
 ## SHA-256 Integrity
 
+- Current release archive: `releases/proof-stamp-bot-oss-v1.1.0.zip`
 - Repository checksums: `FILES_SHA256.txt`
 - Release checksums: `RELEASE_CHECKSUMS.txt`
 - `FILES_SHA256.txt` is generated from raw file bytes in the checked-out repository and excludes itself to avoid recursive mismatch
