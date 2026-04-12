@@ -7,11 +7,24 @@
   <img alt="License MIT" src="https://img.shields.io/badge/License-MIT-16A34A?style=for-the-badge" />
 </p>
 
-Bot: [@ProofStampBot](https://t.me/ProofStampBot)
+<p align="center">
+  <b>Hash it. Anchor it. Prove it.</b>
+</p>
 
 ProofStamp is a Telegram bot for cryptographic anchoring on TON.
-It works with files, documents, and posts, records SHA-256 on-chain, and generates a PDF certificate with QR and transaction link.
-For posts in groups and channels, the bot supports two modes: proof only, or proof together with the full original post text in TON.
+It records SHA-256 on-chain for files, documents, and posts, then generates a PDF certificate with QR and transaction link.
+For group and channel posts, ProofStamp can save proof only or proof together with the full original post text in TON.
+
+Bot: [@ProofStampBot](https://t.me/ProofStampBot)
+
+## Preview
+
+<p align="center">
+  <img src="assets/screenshots/bot-info-start.jpg" alt="Bot info card" width="180" />
+  <img src="assets/screenshots/bot-welcome-languages.jpg" alt="Welcome and language selection" width="180" />
+  <img src="assets/screenshots/bot-payment-flow.jpg" alt="Payment flow" width="180" />
+  <img src="assets/screenshots/certificate-preview.jpg" alt="Certificate preview" width="180" />
+</p>
 
 ## Features
 
@@ -21,35 +34,6 @@ For posts in groups and channels, the bot supports two modes: proof only, or pro
 - Payment via TON and Telegram Stars
 - PDF certificate generation with QR + transaction link
 - Multi-language interface
-
-## Screenshots
-
-<p align="center">
-  <img src="assets/screenshots/bot-info-start.jpg" alt="Bot info card" width="180" />
-  <img src="assets/screenshots/bot-welcome-languages.jpg" alt="Welcome and language selection" width="180" />
-  <img src="assets/screenshots/bot-payment-flow.jpg" alt="Payment flow" width="180" />
-  <img src="assets/screenshots/certificate-preview.jpg" alt="Certificate preview" width="180" />
-</p>
-
-## On-Chain Comment Format
-
-Standard file/document proof:
-
-```text
-ProofStamp
-SHA256:<64-hex>
-```
-
-Post proof with full text:
-
-```text
-ProofStamp
-Post SHA256:<64-hex>
-Text SHA256:<64-hex>
-
-Post text:
-<original post text>
-```
 
 ## Quick Start
 
@@ -74,6 +58,26 @@ Recommended:
 
 - `TONCENTER_API_KEY` - better reliability / rate limits
 - `TON_NETWORK=mainnet|testnet`
+
+## On-Chain Comment Format
+
+Standard file/document proof:
+
+```text
+ProofStamp
+SHA256:<64-hex>
+```
+
+Post proof with full text:
+
+```text
+ProofStamp
+Post SHA256:<64-hex>
+Text SHA256:<64-hex>
+
+Post text:
+<original post text>
+```
 
 ## SHA-256 Integrity
 
