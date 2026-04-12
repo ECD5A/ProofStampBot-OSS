@@ -1,5 +1,12 @@
 # ProofStamp Bot (Open Source)
 
+<p align="center">
+  <img alt="TON Mainnet" src="https://img.shields.io/badge/TON-Mainnet-0098EA?style=for-the-badge" />
+  <img alt="Telegram Bot" src="https://img.shields.io/badge/Telegram-Bot-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" />
+  <img alt="SHA-256" src="https://img.shields.io/badge/SHA--256-On--Chain-111827?style=for-the-badge" />
+  <img alt="License MIT" src="https://img.shields.io/badge/License-MIT-16A34A?style=for-the-badge" />
+</p>
+
 Bot: [@ProofStampBot](https://t.me/ProofStampBot)
 
 ProofStamp is a Telegram bot for cryptographic anchoring on TON.
@@ -14,7 +21,6 @@ For posts in groups and channels, the bot supports two modes: proof only, or pro
 - Payment via TON and Telegram Stars
 - PDF certificate generation with QR + transaction link
 - Multi-language interface
-- Pricing stored in `config/pricing.json`
 
 ## Screenshots
 
@@ -45,34 +51,12 @@ Post text:
 <original post text>
 ```
 
-## Pricing Configuration
-
-Prices are configured in `config/pricing.json`.
-
-Current example:
-
-```json
-{
-  "standard": {
-    "stars": 15,
-    "ton": 0.15,
-    "anchorTon": 0.1
-  },
-  "postText": {
-    "stars": 59,
-    "ton": 0.59,
-    "anchorTon": 0.59
-  }
-}
-```
-
 ## Quick Start
 
 ```bash
 npm ci
 cp .env.example .env
 # edit .env
-# edit config/pricing.json if needed
 npm run build
 npm run start
 ```
